@@ -1,0 +1,109 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Géolocalisation avec Carte</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            background-color: #f4f6f9;
+        }
+        h1 {
+            margin: 20px 0;
+        }
+        #info {
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        #map {
+            height: 500px;
+            width: 90%;
+            margin: 0 auto 20px auto;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        button {
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>📍 Ma Position GPS avec Carte</h1>
+    <div id="info">En attente de la position...</div>
+    <button onclick="copyCoords()">📋 Copier les coordonnées</button>
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <script>
+        let currentLat = null;
+        let currentLng = null;
+        let map = L.map('map').setView([0, 0], 2);
+        let marker = null;
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        if (!navigator.geolocation) {
+            document.getElementById("info").innerHTML =
+                "La géolocalisation n'est pas supportée par votre navigateur.";
+        } else {
+            navigator.geolocation.watchPosition(
+                function(position) {
+                    currentLat = position.coords.latitude;
+                    currentLng = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+
+                    document.getElementById("info").innerHTML = `
+                        Latitude: ${currentLat} |
+                        Longitude: ${currentLng} |
+                        Précision: ${accuracy} m
+                    `;
+
+                    if (marker) {
+                        marker.setLatLng([currentLat, currentLng]);
+                    } else {
+                        marker = L.marker([currentLat, currentLng]).addTo(map);
+                    }
+
+                    map.setView([currentLat, currentLng], 16);
+                },
+                function(error) {
+                    document.getElementById("info").innerHTML =
+                        "Permission refusée ou erreur de localisation.";
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 5000
+                }
+            );
+        }
+
+        function copyCoords() {
+            if (currentLat !== null && currentLng !== null) {
+                const text = `${currentLat}, ${currentLng}`;
+                navigator.clipboard.writeText(text);
+                alert("Coordonnées copiées !");
+            } else {
+                alert("Coordonnées non disponibles.");
+            }
+        }
+    </script>
+
+</body>
+</html>
