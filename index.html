@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Géolocalisation + Punaises (≤100m)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background-color: #f4f6f9;
+      text-align: center;
+    }
+    h1 { margin: 18px 0 8px; }
+    #info {
+      margin: 0 12px 10px;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+    #map {
+      height: 520px;
+      width: 92%;
+      margin: 0 auto 18px auto;
+      border-radius: 10px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+      background: #ddd;
+    }
+    .btns { margin-bottom: 10px; }
+    button {
+      padding: 8px 14px;
+      font-size: 14px;
+      cursor: pointer;
+      margin: 0 6px 8px;
+    }
+    code { background: rgba(0,0,0,0.06); padding: 2px 5px; border-radius: 5px; }
+  </style>
+</head>
+
+<body>
+  <h1>📍 Ma Position + 5 Punaises autour</h1>
+  <div id="info">En attente de la position...</div>
+
+  <div class="btns">
+    <button onclick="copyMyCoords()">📋 Copier MA position</button>
+    <button onclick="centerOnMe()">🎯 Centrer sur moi</button>
+    <button onclick="regeneratePins()">🎲 Regénérer les 5 punaises</button>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <script>
+    // === Config ===
+    const UPDATE_EVERY_MS = 30_000; // 30 secondes
+    const NUM_PINS = 5;
+    const MAX_RADIUS_M = 100; // <= 100m autour de la position
+
+    // === State ===
+    let currentLat = null;
+    let currentLng = null;
+    let currentAccuracy = null;
+    let myMarker = null;
+    let pins = []; // array of Leaflet markers
+    let pinsGenerated = false;
+
+    // === Map init ===
+    const map = L.map('map').setView([0, 0], 2);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // === Helpers ===
+    function toRad(deg) { return deg * Math.PI / 180; }
+    function toDeg(rad) { return rad * 180 / Math.PI; }
+
+    // Haversine distance (meters)
+    function distanceMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000; // Earth radius (m)
+      const φ1 = toRad(lat1), φ2 = toRad(lat2);
+      const Δφ = toRad(lat2 - lat1);
+      const Δλ = toRad(lon2 - lon1);
+      const a = Math.sin(Δφ/2)**2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2)**2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    // Random point within a circle of radius r (meters) around (lat, lng)
+    // Uses random distance with sqrt for uniform area distribution.
+    function randomPointWithinMeters(lat, lng, maxMeters) {
+      const R = 6371000;
+      const bearing = Math.random() * 2 * Math.PI;            // radians
+      const distance = Math.sqrt(Math.random()) * maxMeters;   // meters
+
+      const φ1 = toRad(lat);
+      const λ1 = toRad(lng);
+      const δ = distance / R;
+
+      const sinφ1 = Math.sin(φ1), cosφ1 = Math.cos(φ1);
+      const sinδ = Math.sin(δ), cosδ = Math.cos(δ);
+      const sinθ = Math.sin(bearing), cosθ = Math.cos(bearing);
+
+      const φ2 = Math.asin(sinφ1 * cosδ + cosφ1 * sinδ * cosθ);
+      const λ2 = λ1 + Math.atan2(sinθ * sinδ * cosφ1, cosδ - sinφ1 * Math.sin(φ2));
+
+      return { lat: toDeg(φ2), lng: toDeg(λ2), distance };
+    }
+
+    function setInfo(textHtml) {
+      document.getElementById("info").innerHTML = textHtml;
+    }
+
+    function updateMyMarker() {
+      if (currentLat === null || currentLng === null) return;
+
+      const latlng = [currentLat, currentLng];
+      if (!myMarker) {
+        myMarker = L.marker(latlng).addTo(map).bindPopup("📍 Ma position");
+      } else {
+        myMarker.setLatLng(latlng);
+      }
+    }
+
+    function centerOnMe() {
+      if (currentLat === null || currentLng === null) return;
+      map.setView([currentLat, currentLng], 17);
+    }
+
+    function copyMyCoords() {
+      if (currentLat === null || currentLng === null) {
+        alert("Position non disponible.");
+        return;
+      }
+      const text = `${currentLat}, ${currentLng}`;
+      navigator.clipboard.writeText(text);
+      alert("Coordonnées copiées !");
+    }
+
+    function clearPins() {
+      pins.forEach(m => map.removeLayer(m));
+      pins = [];
+      pinsGenerated = false;
+    }
+
+    function generatePinsAroundMe() {
+      if (currentLat === null || currentLng === null) return;
+
+      clearPins();
+
+      for (let i = 0; i < NUM_PINS; i++) {
+        const p = randomPointWithinMeters(currentLat, currentLng, MAX_RADIUS_M);
+        const marker = L.marker([p.lat, p.lng]).addTo(map);
+
+        marker.on("click", () => {
+          if (currentLat === null || currentLng === null) {
+            marker.bindPopup("Position actuelle inconnue.").openPopup();
+            return;
+          }
+
+          const d = distanceMeters(currentLat, currentLng, p.lat, p.lng);
+          const html = `
+            <div style="min-width: 220px; text-align: left;">
+              <div><strong>📌 Punaise #${i+1}</strong></div>
+              <div><strong>Lat:</strong> <code>${p.lat.toFixed(6)}</code></div>
+              <div><strong>Lng:</strong> <code>${p.lng.toFixed(6)}</code></div>
+              <div><strong>Distance (vol d’oiseau):</strong> <code>${Math.round(d)}</code> m</div>
+            </div>
+          `;
+          marker.bindPopup(html).openPopup();
+        });
+
+        pins.push(marker);
+      }
+
+      pinsGenerated = true;
+    }
+
+    function regeneratePins() {
+      if (currentLat === null || currentLng === null) {
+        alert("Position non disponible.");
+        return;
+      }
+      generatePinsAroundMe();
+      alert("5 punaises régénérées autour de ta position.");
+    }
+
+    function refreshPosition() {
+      if (!navigator.geolocation) {
+        setInfo("La géolocalisation n'est pas supportée par votre navigateur.");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          currentLat = position.coords.latitude;
+          currentLng = position.coords.longitude;
+          currentAccuracy = position.coords.accuracy;
+
+          updateMyMarker();
+
+          // Generate pins once (first valid fix), unless user regenerates
+          if (!pinsGenerated) {
+            generatePinsAroundMe();
+            map.setView([currentLat, currentLng], 17);
+          }
+
+          const now = new Date();
+          setInfo(`
+            <div>
+              <strong>Ma position:</strong> Lat <code>${currentLat.toFixed(6)}</code> | Lng <code>${currentLng.toFixed(6)}</code>
+              | <strong>Précision:</strong> <code>${Math.round(currentAccuracy)}</code> m
+            </div>
+            <div style="opacity: 0.8; font-size: 13px; margin-top: 4px;">
+              Mise à jour: ${now.toLocaleTimeString()}
+              (toutes les 30s)
+            </div>
+            <div style="opacity: 0.85; font-size: 13px; margin-top: 6px;">
+              Clique sur une punaise pour voir ses coordonnées + la distance à vol d’oiseau.
+            </div>
+          `);
+        },
+        (error) => {
+          setInfo("Permission refusée ou erreur de localisation.");
+          console.error(error);
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 8000
+        }
+      );
+    }
+
+    // Boot
+    refreshPosition();
+    setInterval(refreshPosition, UPDATE_EVERY_MS);
+  </script>
+</body>
+</html>
