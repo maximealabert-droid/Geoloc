@@ -5,7 +5,6 @@
   <title>Géolocalisation + Punaises (≤100m)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
   <style>
@@ -52,37 +51,31 @@
 
   <div id="map"></div>
 
-  <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
   <script>
-    // === Config ===
-    const UPDATE_EVERY_MS = 30_000; // 30 secondes
+    const UPDATE_EVERY_MS = 1000;
     const NUM_PINS = 5;
-    const MAX_RADIUS_M = 100; // <= 100m autour de la position
+    const MAX_RADIUS_M = 100;
 
-    // === State ===
     let currentLat = null;
     let currentLng = null;
     let currentAccuracy = null;
     let myMarker = null;
-    let pins = []; // array of Leaflet markers
+    let pins = [];
     let pinsGenerated = false;
 
-    // === Map init ===
     const map = L.map('map').setView([0, 0], 2);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // === Helpers ===
     function toRad(deg) { return deg * Math.PI / 180; }
     function toDeg(rad) { return rad * 180 / Math.PI; }
 
-    // Haversine distance (meters)
     function distanceMeters(lat1, lon1, lat2, lon2) {
-      const R = 6371000; // Earth radius (m)
+      const R = 6371000;
       const φ1 = toRad(lat1), φ2 = toRad(lat2);
       const Δφ = toRad(lat2 - lat1);
       const Δλ = toRad(lon2 - lon1);
@@ -91,12 +84,10 @@
       return R * c;
     }
 
-    // Random point within a circle of radius r (meters) around (lat, lng)
-    // Uses random distance with sqrt for uniform area distribution.
     function randomPointWithinMeters(lat, lng, maxMeters) {
       const R = 6371000;
-      const bearing = Math.random() * 2 * Math.PI;            // radians
-      const distance = Math.sqrt(Math.random()) * maxMeters;   // meters
+      const bearing = Math.random() * 2 * Math.PI;
+      const distance = Math.sqrt(Math.random()) * maxMeters;
 
       const φ1 = toRad(lat);
       const λ1 = toRad(lng);
@@ -169,7 +160,7 @@
               <div><strong>📌 Punaise #${i+1}</strong></div>
               <div><strong>Lat:</strong> <code>${p.lat.toFixed(6)}</code></div>
               <div><strong>Lng:</strong> <code>${p.lng.toFixed(6)}</code></div>
-              <div><strong>Distance (vol d’oiseau):</strong> <code>${Math.round(d)}</code> m</div>
+              <div><strong>Distance:</strong> <code>${Math.round(d)}</code> m</div>
             </div>
           `;
           marker.bindPopup(html).openPopup();
@@ -187,12 +178,12 @@
         return;
       }
       generatePinsAroundMe();
-      alert("5 punaises régénérées autour de ta position.");
+      alert("5 punaises régénérées.");
     }
 
     function refreshPosition() {
       if (!navigator.geolocation) {
-        setInfo("La géolocalisation n'est pas supportée par votre navigateur.");
+        setInfo("La géolocalisation n'est pas supportée.");
         return;
       }
 
@@ -204,7 +195,9 @@
 
           updateMyMarker();
 
-          // Generate pins once (first valid fix), unless user regenerates
+          // AUTO CENTER EACH UPDATE
+          map.setView([currentLat, currentLng], map.getZoom());
+
           if (!pinsGenerated) {
             generatePinsAroundMe();
             map.setView([currentLat, currentLng], 17);
@@ -213,20 +206,18 @@
           const now = new Date();
           setInfo(`
             <div>
-              <strong>Ma position:</strong> Lat <code>${currentLat.toFixed(6)}</code> | Lng <code>${currentLng.toFixed(6)}</code>
-              | <strong>Précision:</strong> <code>${Math.round(currentAccuracy)}</code> m
+              <strong>Ma position:</strong> 
+              <code>${currentLat.toFixed(6)}</code> , 
+              <code>${currentLng.toFixed(6)}</code>
+              | précision <code>${Math.round(currentAccuracy)}</code> m
             </div>
-            <div style="opacity: 0.8; font-size: 13px; margin-top: 4px;">
-              Mise à jour: ${now.toLocaleTimeString()}
-              (toutes les 30s)
-            </div>
-            <div style="opacity: 0.85; font-size: 13px; margin-top: 6px;">
-              Clique sur une punaise pour voir ses coordonnées + la distance à vol d’oiseau.
+            <div style="opacity:0.8;font-size:13px;margin-top:4px;">
+              Mise à jour: ${now.toLocaleTimeString()} (1s)
             </div>
           `);
         },
         (error) => {
-          setInfo("Permission refusée ou erreur de localisation.");
+          setInfo("Erreur de géolocalisation.");
           console.error(error);
         },
         {
@@ -237,7 +228,6 @@
       );
     }
 
-    // Boot
     refreshPosition();
     setInterval(refreshPosition, UPDATE_EVERY_MS);
   </script>
